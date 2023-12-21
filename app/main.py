@@ -2,7 +2,7 @@ import base64
 import textwrap
 
 from fastapi import FastAPI, Request
-from github import Github, GithubException
+from github import Github, GithubException, Auth
 import openai
 import os
 import dotenv
@@ -11,12 +11,13 @@ app = FastAPI()
 
 # GitHub and OpenAI credentials
 openai_api_key = os.getenv('OPENAI_API_KEY')
-encoded_pem = os.environ.get('GITHUB_APP_PRIVATE_KEY')
-decoded_pem = base64.b64decode(encoded_pem)
+encoded_private_key = os.environ.get('GITHUB_APP_PRIVATE_KEY')
+decoded_private_key = base64.b64decode(encoded_private_key).decode('utf-8')
 
 
 # Initialize clients
-github = Github(base_url="https://api.github.com/app", login_or_token=decoded_pem)
+    auth = Auth.AppAuth(45354772, decoded_private_key).get_installation_auth(45354772) # todo: use env vars
+g = Github(auth=auth)
 openai.api_key = openai_api_key
 
 
@@ -31,7 +32,7 @@ async def handle_webhook(request: Request):
         pr_number = payload['pull_request']['number']
 
         try:
-            repo = github.get_repo(repo_name)
+            repo = g.get_repo(repo_name)
             pr = repo.get_pull(pr_number)
             body = pr.body
 
@@ -53,7 +54,7 @@ async def handle_webhook(request: Request):
 
 async def get_pr_diff(repo_name: str, pr_number: int) -> str:
     try:
-        repo = github.get_repo(repo_name)
+        repo = g.get_repo(repo_name)
         pr = repo.get_pull(pr_number)
         return pr.get_diff()
     except GithubException as e:

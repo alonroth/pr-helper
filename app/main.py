@@ -11,28 +11,49 @@ github_token = os.getenv('GITHUB_TOKEN')
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
 # Initialize clients
-g = Github(github_token)
+github = Github(github_token)
 openai.api_key = openai_api_key
+
 
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     payload = await request.json()
 
-    # ... (existing code for handling the PR description update)
-
-    if 'pull_request' in payload:
+    # Check if it's a pull request opened event
+    if payload['action'] == 'opened':
         repo_name = payload['repository']['full_name']
         pr_number = payload['pull_request']['number']
 
-        diff = await get_pr_diff(repo_name, pr_number)
-        if diff:
-            summary = await generate_summary(diff)
-            await post_summary_to_pr(repo_name, pr_number, summary)
+        try:
+            repo = github.get_repo(repo_name)
+            pr = repo.get_pull(pr_number)
+            body = pr.body
+
+            # Check for the token in the PR description
+            if ':write_ai_description' in body:
+
+                diff = await get_pr_diff(repo_name, pr_number)
+                if diff:
+                    summary = await generate_summary(diff)
+                    new_body = body.replace(':write_ai_description',
+                                            'Summary:\n\n' + summary)
+                    pr.edit(body=new_body)
+                    return {"message": "PR description updated successfully."}
+        except GithubException as e:
+            return {"error": str(e)}
 
     return {"message": "Webhook received, but no action taken."}
 
+
 async def get_pr_diff(repo_name: str, pr_number: int) -> str:
-    # ... (existing code for getting PR diff)
+    try:
+        repo = github.get_repo(repo_name)
+        pr = repo.get_pull(pr_number)
+        return pr.get_diff()
+    except GithubException as e:
+        print(f"Error getting PR diff: {str(e)}")
+        return ""
+
 
 async def generate_summary(diff: str) -> str:
     response = openai.Completion.create(
@@ -42,13 +63,6 @@ async def generate_summary(diff: str) -> str:
     )
     return response.choices[0].text.strip()
 
-async def post_summary_to_pr(repo_name: str, pr_number: int, summary: str):
-    try:
-        repo = g.get_repo(repo_name)
-        pr = repo.get_pull(pr_number)
-        pr.create_issue_comment(f"### PR Summary:\n\n{summary}")
-    except GithubException as e:
-        print(f"Error posting summary to PR: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

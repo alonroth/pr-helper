@@ -23,9 +23,10 @@ openai.api_key = openai_api_key
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     payload = await request.json()
+    action = payload.get('action', '')
 
-    # Check if it's a pull request opened event
-    if payload['action'] == 'opened':
+    # Check if it's a pull request that's been opened or edited
+    if payload.get('pull_request') and action in ['opened', 'edited']:
         repo_name = payload['repository']['full_name']
         pr_number = payload['pull_request']['number']
 

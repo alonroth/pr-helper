@@ -1,3 +1,6 @@
+import base64
+import textwrap
+
 from fastapi import FastAPI, Request
 from github import Github, GithubException
 import openai
@@ -7,11 +10,13 @@ import dotenv
 app = FastAPI()
 
 # GitHub and OpenAI credentials
-github_token = os.getenv('GITHUB_TOKEN')
 openai_api_key = os.getenv('OPENAI_API_KEY')
+encoded_pem = os.environ.get('GITHUB_APP_PRIVATE_KEY')
+decoded_pem = base64.b64decode(encoded_pem)
+
 
 # Initialize clients
-github = Github(github_token)
+github = Github(base_url="https://api.github.com/app", login_or_token=decoded_pem)
 openai.api_key = openai_api_key
 
 
@@ -56,12 +61,28 @@ async def get_pr_diff(repo_name: str, pr_number: int) -> str:
 
 
 async def generate_summary(diff: str) -> str:
-    response = openai.Completion.create(
-        engine="text-davinci-003",  # Use the latest available engine
-        prompt=f"Summarize the following PR diff:\n\n{diff}",
-        max_tokens=150  # Adjust as needed
+    # Split the diff into smaller chunks
+    chunks = textwrap.wrap(diff, 1000)  # Adjust the chunk size as needed
+
+    # Generate summaries for each chunk
+    partial_summaries = []
+    for chunk in chunks:
+        response = openai.Completion.create(
+            engine="gpt-4-model-name",  # Replace with actual GPT-4 model name
+            prompt=f"Summarize the following PR diff chunk:\n\n{chunk}",
+            max_tokens=150
+        )
+        partial_summaries.append(response.choices[0].text.strip())
+
+    # Combine partial summaries and generate a final summary
+    combined_partial_summaries = ' '.join(partial_summaries)
+    final_summary_response = openai.Completion.create(
+        engine="gpt-4",  # Replace with actual GPT-4 model name
+        prompt=f"Generate a comprehensive summary based on these partial summaries:\n\n{combined_partial_summaries}",
+        max_tokens=150
     )
-    return response.choices[0].text.strip()
+
+    return final_summary_response.choices[0].text.strip()
 
 
 if __name__ == "__main__":

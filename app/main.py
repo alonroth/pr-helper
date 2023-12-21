@@ -36,12 +36,12 @@ async def handle_webhook(request: Request):
             body = pr.body
 
             # Check for the token in the PR description
-            if ':write_ai_description' in body:
+            if ':ai_summary' in body:
 
                 diff = await get_pr_diff(repo_name, pr_number)
                 if diff:
                     summary = await generate_summary(diff)
-                    new_body = body.replace(':write_ai_description',
+                    new_body = body.replace(':ai_summary',
                                             'Summary:\n\n' + summary)
                     pr.edit(body=new_body)
                     return {"message": "PR description updated successfully."}

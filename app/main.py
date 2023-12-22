@@ -1,5 +1,6 @@
 import base64
 import textwrap
+import httpx
 
 from fastapi import FastAPI, Request
 from github import Github, GithubException, Auth
@@ -58,8 +59,15 @@ async def get_pr_diff(repo_name: str, pr_number: int) -> str:
     try:
         repo = g.get_repo(repo_name)
         pr = repo.get_pull(pr_number)
-        return pr.get_diff()
-    except GithubException as e:
+        diff_url = pr.diff_url
+
+        # Make an authenticated HTTP request to the diff URL
+        headers = {"Authorization": f"token {auth.token}"}
+        async with httpx.AsyncClient() as client:
+            response = await client.get(diff_url, headers=headers)
+            response.raise_for_status()
+            return response.text
+    except (GithubException, httpx.HTTPError) as e:
         print(f"Error getting PR diff: {str(e)}")
         return ""
 

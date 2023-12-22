@@ -7,6 +7,8 @@ import openai
 import os
 import dotenv
 
+dotenv.load_dotenv()
+
 app = FastAPI()
 
 # GitHub and OpenAI credentials

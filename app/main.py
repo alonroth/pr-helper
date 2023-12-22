@@ -62,7 +62,10 @@ async def get_pr_diff(repo_name: str, pr_number: int) -> str:
         diff_api_url = f"https://api.github.com/repos/{repo_name}/pulls/{pr_number}/diff"
 
         # Make an authenticated HTTP request to the diff URL
-        headers = {"Authorization": f"token {auth.token}"}
+        headers = {
+            "Authorization": f"token {auth.token}",
+            "Accept": "application/vnd.github.v3.diff"
+        }
         async with httpx.AsyncClient() as client:
             response = await client.get(diff_api_url, headers=headers)
             response.raise_for_status()

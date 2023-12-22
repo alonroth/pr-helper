@@ -16,7 +16,7 @@ decoded_private_key = base64.b64decode(encoded_private_key).decode('utf-8')
 
 
 # Initialize clients
-    auth = Auth.AppAuth(45354772, decoded_private_key).get_installation_auth(45354772) # todo: use env vars
+auth = Auth.AppAuth(729209, decoded_private_key).get_installation_auth(45354772) # todo: use env vars
 g = Github(auth=auth)
 openai.api_key = openai_api_key
 

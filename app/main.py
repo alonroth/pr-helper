@@ -6,7 +6,7 @@ import textwrap
 from itertools import islice
 
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
-from github import Github, GithubException, Auth, PullRequest, Repository
+from github import Github, GithubException, Auth, PullRequest, Repository, PullRequestComment
 from openai import AsyncOpenAI
 
 import os
@@ -25,7 +25,7 @@ GITHUB_APP_SECRET = os.environ.get('GITHUB_APP_SECRET')
 
 # Initialize clients
 client = AsyncOpenAI(api_key=openai_api_key)
-auth = Auth.AppAuth(729209, github_private_key).get_installation_auth(45373297) # todo: use env vars
+auth = Auth.AppAuth(729209, github_private_key).get_installation_auth(45413971) # todo: use env vars
 g = Github(auth=auth)
 
 MAGIC_PHRASE = "ai:summary"
@@ -49,16 +49,20 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     if not x_hub_signature or not verify_signature(x_hub_signature, body):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    action = payload.get('action', '')
+    try:
+        action = payload['action']
+        repo_name = payload['repository']['full_name']
+        pr_number = payload['pull_request']['number']
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Invalid payload - missing action, "
+                                                    "repo name or PR number")
+
+    repo = g.get_repo(repo_name)
+    pr = repo.get_pull(pr_number)
 
     # Check if it's a pull request that's been opened or edited
     if payload.get('pull_request') and action in ['opened', 'edited']:
-        repo_name = payload['repository']['full_name']
-        pr_number = payload['pull_request']['number']
-
         try:
-            repo = g.get_repo(repo_name)
-            pr = repo.get_pull(pr_number)
             issue = repo.get_issue(number=pr_number)
 
             # Check for the token in the PR description
@@ -71,7 +75,47 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         except GithubException as e:
             return {"error": str(e)}
 
+    if action == 'created' and 'comment' in payload:
+        comment = pr.get_review_comment(payload['comment']['id'])
+        reaction = comment.create_reaction('eyes')
+        eyes_reaction_id = reaction.id
+        body = comment.body
+
+        if 'ai:suggest' in body:
+            trigger_index = body.find('ai:suggest')
+            user_request = body[trigger_index + len('ai:suggest'):].strip()
+
+            await process_comment_for_suggestion(pr, comment, user_request,
+                                                 eyes_reaction_id)
+
     return {"message": "Webhook received, but no action taken."}
+
+
+async def process_comment_for_suggestion(pr: PullRequest, comment: PullRequestComment,
+                                         user_request: str, eyes_reaction_id: int):
+    response = await client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system",
+             "content": "You are an expert programmer, and as part of a code review, you need to suggest a change in a file."},
+            {"role": "user",
+             "content": f"""
+             Take a look at this diff hunk: {comment.diff_hunk}.
+             The file path is: {comment.path}.
+             Here is the user request for the change: {user_request}
+             
+             The user requested a change in line {comment.position} of the file.
+             
+             Answer in a Github suggestion format using the "```suggestion" markdown without any additional text.
+             """
+             }
+        ],
+        temperature=0
+    )
+
+    suggestion = response.choices[0].message.content.strip()
+    pr.create_review_comment_reply(body=suggestion, comment_id=comment.id)
+    comment.delete_reaction(eyes_reaction_id)
 
 
 async def write_summary(repo: Repository, pr: PullRequest, eyes_reaction_id: int):
@@ -87,14 +131,18 @@ async def write_summary(repo: Repository, pr: PullRequest, eyes_reaction_id: int
 
 async def get_pr_files_diff(repo: Repository, pr: PullRequest) -> list:
     head_sha = pr.head.sha
-    files = list(islice(pr.get_files(), 51))
+    files = list(islice(pr.get_files(), 75))
     files_diff = []
     for file in files:
         path = file.filename
         patch = file.patch
-        contents = repo.get_contents(path, ref=head_sha)
-        content = contents.decoded_content.decode()
-        files_diff.append(f"File: {path}\n\n{patch}\n\n{content}\n\n\n\n")
+        # try:
+        #     contents = repo.get_contents(path, ref=head_sha)
+        # except GithubException:
+        #     logger.warning(f"({pr.id}) File {path} not found in repo")
+        #     continue
+        # content = contents.decoded_content.decode()
+        files_diff.append(f"File: {path}\n\n{patch}\n\n\n\n")
 
     return files_diff
 
@@ -103,30 +151,34 @@ async def process_chunk(pr: PullRequest, chunk: str) -> str:
     response = await client.chat.completions.create(
         model="gpt-4",
         messages=[
+            {"role": "system",
+             "content": "You are an expert programmer, and you are trying to summarize one file changes from a pull request."},
             {"role": "user",
-             "content": f"""Summarize this PR file diff, highlighting the most important changes.
-                        Focus on major updates, significant  code modifications, and important feature alterations. 
-                        Omit minor or trivial details. If there are no major updates
-                        don't write anything. Start with writing the file path.
-                        The PR title is: {pr.title}
-                        
-                        The file diff is:
-                        {chunk}"""
+             "content": f"""Take a look at this PR file changes.
+             Summarize the rational behind the changes in this file in up to 3 sentences while addressing major changes only.  
+             Take into consideration that import changes, variable, function, classes renaming are not important - don't summarize them.
+             If there major changes, start with writing the file path.
+             If there are no major changes, return just the string "No major changes".
+            The PR title is: {pr.title}
+            
+            The file diff is:
+            {chunk}"""
              }
         ],
         temperature=0
     )
     chunk_summary = response.choices[0].message.content.strip()
     logger.info(f"({pr.id}) Chunk summary: {chunk_summary}")
+
+    if "No major changes" in chunk_summary:
+        return ""
     return chunk_summary
 
 
 async def generate_summary(pr: PullRequest, files_diff: list) -> str:
     # Split the file diff into smaller chunks if its too long
     tasks = []
-    for file in files_diff:
-        chunks = textwrap.wrap(file, 4 * 8000)  # Adjust the chunk size as needed
-        tasks.extend([process_chunk(pr, chunk) for chunk in chunks])
+    tasks.extend([process_chunk(pr, file) for file in files_diff])
     partial_summaries = await asyncio.gather(*tasks)
 
     # Combine partial summaries and generate a final summary
@@ -142,7 +194,7 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
              objectives, significant changes, and overall impact of the PR, 
              while omitting minor details and technical specifics.
              
-             The summary should be short and up to 3 sentences.
+             The summary should be short and up to 3 sentences long without mentioning the PR title.
              
              The PR title is: {pr.title}
              
@@ -150,7 +202,8 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
              '''{combined_partial_summaries}'''
              """}
         ],
-        temperature=0.2
+        temperature=0,
+        max_tokens=4000
     )
     final_summary = final_summary_response.choices[0].message.content.strip()
     logger.info(f"({pr.id}) Final summary: {final_summary}")

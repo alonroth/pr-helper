@@ -2,11 +2,11 @@ import asyncio
 import base64
 import hashlib
 import hmac
-import textwrap
 from itertools import islice
 
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
-from github import Github, GithubException, Auth, PullRequest, Repository, PullRequestComment
+from github import Github, GithubException, Auth, PullRequest, Repository,\
+    PullRequestComment
 from openai import AsyncOpenAI
 
 import os
@@ -23,13 +23,11 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 github_private_key = base64.b64decode(os.environ.get('GITHUB_APP_PRIVATE_KEY')).decode('utf-8')
 GITHUB_APP_SECRET = os.environ.get('GITHUB_APP_SECRET')
 
-# Initialize clients
 client = AsyncOpenAI(api_key=openai_api_key)
-auth = Auth.AppAuth(729209, github_private_key).get_installation_auth(45413971) # todo: use env vars
-g = Github(auth=auth)
 
-MAGIC_PHRASE = "ai:summary"
-IN_PROGRESS_MESSAGE = "Generating summary..."
+SUMMARY_MAGIC_PHRASE = "ai:summary"
+SUGGEST_MAGIC_PHRASE = "ai:suggest"
+SUMMARY_IN_PROGRESS_MESSAGE = "AI Generating summary..."
 
 
 def verify_signature(x_hub_signature: str, data: bytes) -> bool:
@@ -53,40 +51,49 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         action = payload['action']
         repo_name = payload['repository']['full_name']
         pr_number = payload['pull_request']['number']
+        installation_id = payload['installation']['id']
     except KeyError:
         raise HTTPException(status_code=400, detail="Invalid payload - missing action, "
-                                                    "repo name or PR number")
+                                                    "repo name, PR number, "
+                                                    "or installation ID")
 
+    auth = Auth.AppAuth(os.environ.get('GITHUB_APP_ID'), github_private_key).get_installation_auth(installation_id)
+    g = Github(auth=auth)
     repo = g.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
 
     # Check if it's a pull request that's been opened or edited
-    if payload.get('pull_request') and action in ['opened', 'edited']:
+    if 'pull_request' in payload and action in ('opened', 'edited'):
         try:
             issue = repo.get_issue(number=pr_number)
 
             # Check for the token in the PR description
-            if MAGIC_PHRASE in pr.body:
-                pr.body.replace(MAGIC_PHRASE, IN_PROGRESS_MESSAGE)
+            if SUMMARY_MAGIC_PHRASE in pr.body:
+                new_body = pr.body.replace(SUMMARY_MAGIC_PHRASE, SUMMARY_IN_PROGRESS_MESSAGE)
+                pr.edit(body=new_body)
                 reaction = issue.create_reaction('eyes')
                 eyes_reaction_id = reaction.id
-                background_tasks.add_task(write_summary, repo, pr, eyes_reaction_id)
-                return "Sent to background task queue."
+                background_tasks.add_task(process_pr_for_summary, repo, pr, eyes_reaction_id)
+                return "Sent PR to background summarize."
         except GithubException as e:
             return {"error": str(e)}
 
-    if action == 'created' and 'comment' in payload:
-        comment = pr.get_review_comment(payload['comment']['id'])
-        reaction = comment.create_reaction('eyes')
-        eyes_reaction_id = reaction.id
-        body = comment.body
+    if 'comment' in payload and action in ('created', 'edited'):
+        try:
+            comment = pr.get_review_comment(payload['comment']['id'])
+            body = comment.body
 
-        if 'ai:suggest' in body:
-            trigger_index = body.find('ai:suggest')
-            user_request = body[trigger_index + len('ai:suggest'):].strip()
+            if SUGGEST_MAGIC_PHRASE in body:
+                trigger_index = body.find(SUGGEST_MAGIC_PHRASE)
+                user_request = body[trigger_index + len('ai:suggest'):].strip()
 
-            await process_comment_for_suggestion(pr, comment, user_request,
-                                                 eyes_reaction_id)
+                reaction = comment.create_reaction('eyes')
+                eyes_reaction_id = reaction.id
+                background_tasks.add_task(process_comment_for_suggestion, pr,
+                                          comment, user_request, eyes_reaction_id)
+                return "Sent comment to suggestion."
+        except GithubException as e:
+            return {"error": str(e)}
 
     return {"message": "Webhook received, but no action taken."}
 
@@ -118,12 +125,12 @@ async def process_comment_for_suggestion(pr: PullRequest, comment: PullRequestCo
     comment.delete_reaction(eyes_reaction_id)
 
 
-async def write_summary(repo: Repository, pr: PullRequest, eyes_reaction_id: int):
+async def process_pr_for_summary(repo: Repository, pr: PullRequest, eyes_reaction_id: int):
     files_diff = await get_pr_files_diff(repo, pr)
     if files_diff:
         summary = await generate_summary(pr, files_diff)
-        new_body = pr.body.replace(MAGIC_PHRASE,
-                                '🤖 AI Generated Summary 🤖:\n\n' + summary)
+        new_body = pr.body.replace(SUMMARY_IN_PROGRESS_MESSAGE,
+                                '🤖 AI Generated Summary 🤖\n\n' + summary)
         pr.edit(body=new_body)
         issue = repo.get_issue(number=pr.number)
         issue.delete_reaction(eyes_reaction_id)

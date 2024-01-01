@@ -208,7 +208,7 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
              
              The summary should be short, in bullet list and up to 8 list items but should be focused only on the PR main objectives so it can and should be less than 8 if it's not importantZ.
              Don't mention the PR title in the summary.
-             Examples of unimportant details: import changes, introduction of new variables or constants, renaming of objects.
+             Examples of unimportant details: import changes, introduction of new variables or constants, renaming of objects, type changes, CSS changes.
              Don't get into too much technical details.
              
              If there are multiple items related to the same objective, use only one short list item.

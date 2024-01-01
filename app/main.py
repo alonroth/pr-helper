@@ -200,7 +200,8 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
              Synthesize these into a clear, concise overview that captures the main 
              objectives and overall impact of the PR, while omitting minor details and technical specifics.
              
-             The summary should be short, in bullet list and up to 8 list items but should be focused only on the PR main objectives so it can and should be less than 8 if it's not important.
+             The summary should be short, in bullet list and up to 8 list items but should be focused only on the PR main objectives so it can and should be less than 8 if it's not importantZ.
+             Don't mention the PR title in the summary.
              Examples of unimportant details: import changes, introduction of new variables or constants, renaming of objects.
              
              The PR title is: {pr.title}

@@ -198,10 +198,9 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
              "content": f"""
              Create a consolidated high-level summary based on the following files diff summaries of the PR.
              Synthesize these into a clear, concise overview that captures the main 
-             objectives, significant changes, and overall impact of the PR, 
-             while omitting minor details and technical specifics.
+             objectives and overall impact of the PR, while omitting minor details and technical specifics.
              
-             The summary should be short and up to 3 sentences long without mentioning the PR title.
+             The summary should be short, in bullet list and up to 8 list items without mentioning the PR title.
              
              The PR title is: {pr.title}
              

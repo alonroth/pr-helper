@@ -29,6 +29,34 @@ SUMMARY_MAGIC_PHRASE = "ai:summary"
 SUGGEST_MAGIC_PHRASE = "ai:suggest"
 SUMMARY_IN_PROGRESS_MESSAGE = "AI Generating summary..."
 
+# MAIN_SUMMARY_PROMPT = f"""
+# Create a consolidated high-level summary based on the following files diff summaries of the PR.
+# Synthesize these into a clear, concise overview that captures the main
+# objectives and overall impact of the PR, while omitting minor details and technical specifics.
+#
+#
+# The PR title is: %s
+#
+# The partial summaries are:
+# '''%s'''
+#
+# The summary should be short, in bullet list and up to 8 list items but should be focused only on the PR main objectives so it can and should be less than 8 if it's not importantZ.
+# Don't mention the PR title in the summary.
+# Examples of unimportant details: import changes, introduction of new variables or constants, renaming of objects, type changes, CSS changes.
+# Don't get into too much technical details.
+#
+# If there are multiple items related to the same objective, use only one short list item.
+# """
+
+MAIN_SUMMARY_PROMPT = f"""
+Based on the following PR summaries of the files diff.
+Write in not more than 2 sentences what is the main goal of the PR.
+
+The PR title is: %s
+
+The partial summaries are:
+'''%s'''
+"""
 
 def verify_signature(x_hub_signature: str, data: bytes) -> bool:
     # Use HMAC to compute the hash
@@ -195,24 +223,7 @@ async def generate_summary(pr: PullRequest, files_diff: list) -> str:
         messages=[
             {"role": "system", "content": "You are an expert programmer, and you are trying to summarize a pull request."},
             {"role": "user",
-             "content": f"""
-             Create a consolidated high-level summary based on the following files diff summaries of the PR.
-             Synthesize these into a clear, concise overview that captures the main 
-             objectives and overall impact of the PR, while omitting minor details and technical specifics.
-            
-             
-             The PR title is: {pr.title}
-             
-             The partial summaries are:
-             '''{combined_partial_summaries}'''
-             
-             The summary should be short, in bullet list and up to 8 list items but should be focused only on the PR main objectives so it can and should be less than 8 if it's not importantZ.
-             Don't mention the PR title in the summary.
-             Examples of unimportant details: import changes, introduction of new variables or constants, renaming of objects, type changes, CSS changes.
-             Don't get into too much technical details.
-             
-             If there are multiple items related to the same objective, use only one short list item.
-             """}
+             "content": MAIN_SUMMARY_PROMPT % (pr.title, combined_partial_summaries)}
         ],
         temperature=0,
         max_tokens=4000

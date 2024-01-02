@@ -51,6 +51,8 @@ SUMMARY_IN_PROGRESS_MESSAGE = "AI Generating summary..."
 MAIN_SUMMARY_PROMPT = f"""
 Based on the following PR summaries of the files diff.
 Write in not more than 2 sentences what is the main goal of the PR.
+Also 1 sentence is okay if it's clear and concise.
+Don't get into too much technical details.
 
 The PR title is: %s
 

@@ -51,8 +51,6 @@ SUMMARY_IN_PROGRESS_MESSAGE = "AI Generating summary..."
 MAIN_SUMMARY_PROMPT = f"""
 Based on the following PR summaries of the files diff.
 Write in not more than 2 sentences what is the main goal of the PR.
-Also 1 sentence is okay if it's clear and concise.
-Don't get into too much technical details.
 
 The PR title is: %s
 
@@ -160,7 +158,7 @@ async def process_pr_for_summary(repo: Repository, pr: PullRequest, eyes_reactio
     if files_diff:
         summary = await generate_summary(pr, files_diff)
         new_body = pr.body.replace(SUMMARY_IN_PROGRESS_MESSAGE,
-                                '🤖 AI Generated Summary 🤖\n\n' + summary)
+                                summary + '\n🤖 AI Generated Summary')
         pr.edit(body=new_body)
         issue = repo.get_issue(number=pr.number)
         issue.delete_reaction(eyes_reaction_id)

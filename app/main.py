@@ -158,7 +158,7 @@ async def process_pr_for_summary(repo: Repository, pr: PullRequest, eyes_reactio
     if files_diff:
         summary = await generate_summary(pr, files_diff)
         new_body = pr.body.replace(SUMMARY_IN_PROGRESS_MESSAGE,
-                                summary + '\n🤖 AI Generated Summary')
+                                summary + '\n🤖 AI generated summary')
         pr.edit(body=new_body)
         issue = repo.get_issue(number=pr.number)
         issue.delete_reaction(eyes_reaction_id)

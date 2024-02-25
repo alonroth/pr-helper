@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from github import Github, Auth
 
 from app.comment_suggest import comment_suggest
-from app.config import GITHUB_APP_PRIVATE_KEY, GITHUB_APP_ID, GITHUB_APP_SECRET
+from app.config import GITHUB_APP_PRIVATE_KEY, GITHUB_APP_ID, GITHUB_APP_WEBHOOK_SECRET
 from app.pr_summarize import pr_summarize, SUMMARY_MAGIC_PHRASE
 from app.utils import github_verify_signature
 
@@ -16,7 +16,7 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     body = await request.body()
 
-    if not github_verify_signature(GITHUB_APP_SECRET, x_hub_signature, body):
+    if not github_verify_signature(GITHUB_APP_WEBHOOK_SECRET, x_hub_signature, body):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     try:

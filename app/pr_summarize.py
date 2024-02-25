@@ -49,7 +49,7 @@ def pr_summarize(repo: Repository, pr: PullRequest, background_tasks: Background
 async def process_pr_for_summary(repo: Repository, pr: PullRequest, eyes_reaction_id: int):
     files_diff = await get_pr_files_diff(pr)
     if files_diff:
-        summary = await generate_final_summary(pr, files_diff)
+        summary = await generate_summary(pr, files_diff)
         new_body = pr.body.replace(SUMMARY_IN_PROGRESS_MESSAGE,
                                 summary + '\n🤖 AI generated summary')
         pr.edit(body=new_body)
@@ -68,30 +68,30 @@ async def get_pr_files_diff(pr: PullRequest) -> list:
     return files_diff
 
 
-async def process_file_diff(pr: PullRequest, file_diff: str) -> str:
+async def summary_file_diff(pr: PullRequest, file_diff: str) -> str:
     response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": CHUNK_USER_PROMPT.format(pr.title, file_diff)
+                "content": CHUNK_USER_PROMPT % (pr.title, file_diff)
             }
         ],
         temperature=0
     )
-    chunk_summary = response.choices[0].message.content.strip()
-    logger.info(f"({pr.id}) Chunk summary: {chunk_summary}")
+    file_summary = response.choices[0].message.content.strip()
+    logger.info(f"({pr.id}) File summary: {file_summary}")
 
-    if "No major changes" in chunk_summary:
+    if "No major changes" in file_summary:
         return ""
-    return chunk_summary
+    return file_summary
 
 
-async def generate_final_summary(pr: PullRequest, files_diff: list) -> str:
+async def generate_summary(pr: PullRequest, files_diff: list) -> str:
     # Split the file diff into smaller chunks if its too long
     tasks = []
-    tasks.extend([process_file_diff(pr, file) for file in files_diff])
+    tasks.extend([summary_file_diff(pr, file) for file in files_diff])
     partial_summaries = await asyncio.gather(*tasks)
 
     # Combine partial summaries and generate a final summary
@@ -102,7 +102,7 @@ async def generate_final_summary(pr: PullRequest, files_diff: list) -> str:
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": FINAL_SUMMARY_USER_PROMPT.format(pr.title, combined_partial_summaries)
+                "content": FINAL_SUMMARY_USER_PROMPT % (pr.title, combined_partial_summaries)
             }
         ],
         temperature=0,

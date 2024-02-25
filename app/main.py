@@ -12,7 +12,7 @@ app = FastAPI()
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
-    x_hub_signature = request.headers.get('X-Hub-Signature')
+    x_hub_signature = request.headers.get('X-Hub-Signature-256')
     payload = await request.json()
     body = await request.body()
 

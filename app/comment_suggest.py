@@ -41,7 +41,7 @@ async def process_comment_for_suggestion(pr: PullRequest, comment: PullRequestCo
         messages=[
             {"role": "system", "content": SUGGEST_SYSTEM_PROMPT},
             {"role": "user",
-             "content": SUGGEST_USER_PROMPT.format(
+             "content": SUGGEST_USER_PROMPT % (
                  comment.diff_hunk, comment.path, user_request, comment.position
              )
              }

@@ -40,7 +40,7 @@ After deployment, update your GitHub App's **Webhook URL** with your deployed ap
 
 ### Step 4: Setting Up Environment Variables
 
-Create a `.env` file in the root of your project to store your environment variables. Here's an example `.env` file:
+Copy the `.env.example` file to `.env` in the root of your project to store your environment variables. Here's an example `.env` file:
 
 ```env
 GITHUB_APP_ID=your_app_id

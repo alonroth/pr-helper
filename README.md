@@ -1,11 +1,15 @@
-# GitHub PR Helper Application
+<p align="center">
+  <img src="./logo.png" alt="PR Helper Logo" width="200" height="200">
+</p>
 
-This GitHub Application helps you to write concise summaries of your pull requests and intelligent suggestions within your PR discussions.
+# PR Helper
+
+PR Helper will write concise summaries of your pull requests and intelligent suggestions within your PR discussions.
 
 ## Features
 
 - **PR Summarization:** Write `ai:summary` in your PR body to generate a summary for pull requests.
-- **Comment Suggestions:** Write `ai:suggest` together with a request and it will generate and post relevant suggestion.
+- **Comment Suggestions:** Write `ai:suggest` together inside code review comment together with a request, and it will generate and post relevant suggestion.
 
 ## Setup Guide
 
@@ -48,3 +52,8 @@ GITHUB_APP_WEBHOOK_SECRET=your_webhook_secret
 GITHUB_APP_PRIVATE_KEY=your_base64_encoded_private_key
 
 OPENAI_API_KEY=your_openai_key
+```
+
+## Limitations
+- Currently, we are processing every file that is changed in the PR in a dedicated OpenAI call simulataneously. This can be improved by batching the files and processing them by the max token limit.
+- The current implementation is not optimized for large PRs with multiple changes as it can reach the OpenAI max token limit. This can be improved by summarizing the PR in chunks and then combining the results.

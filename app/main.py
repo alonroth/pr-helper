@@ -35,7 +35,7 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
     pr = repo.get_pull(pr_number)
 
     if 'pull_request' in payload and action in ('opened', 'edited') \
-            and SUMMARY_MAGIC_PHRASE in pr.body:
+            and pr.body and SUMMARY_MAGIC_PHRASE in pr.body:
         return pr_summarize(repo, pr, background_tasks)
     if 'comment' in payload and action in ('created', 'edited'):
         return comment_suggest(pr, payload, background_tasks)

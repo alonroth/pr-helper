@@ -1,4 +1,4 @@
-# GitHub PR Helper Application
+# PR Helper
 
 This GitHub Application helps you to write concise summaries of your pull requests and intelligent suggestions within your PR discussions.
 

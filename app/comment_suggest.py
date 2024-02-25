@@ -16,7 +16,7 @@ SUGGEST_USER_PROMPT = f"""
              """
 
 
-def comment_suggest(pr: PullRequest, payload: dict, background_tasks: BackgroundTasks):
+def comment_suggest(pr: PullRequest, payload: dict, background_tasks: BackgroundTasks) -> dict:
     try:
         comment = pr.get_review_comment(payload['comment']['id'])
         body = comment.body
@@ -29,7 +29,7 @@ def comment_suggest(pr: PullRequest, payload: dict, background_tasks: Background
             eyes_reaction_id = reaction.id
             background_tasks.add_task(process_comment_for_suggestion, pr,
                                       comment, user_request, eyes_reaction_id)
-            return "Sent comment to suggestion."
+            return {"message": "Sent comment to suggestion."}
     except GithubException as e:
         return {"error": str(e)}
 

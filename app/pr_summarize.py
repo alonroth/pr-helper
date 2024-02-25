@@ -12,7 +12,7 @@ SUMMARY_MAGIC_PHRASE = "ai:summary"
 SUMMARY_IN_PROGRESS_MESSAGE = "AI Generating summary..."
 
 SUMMARY_SYSTEM_PROMPT = "You are an expert programmer, and you are trying to summarize a pull request."
-CHUNK_USER_PROMPT = f"""Take a look at this PR file changes.
+FILE_SUMMARY_USER_PROMPT = f"""Take a look at this PR file changes.
              Summarize the rational behind the changes in this file in up to 3 sentences while addressing major changes only.  
              Take into consideration that import changes, variable, function, classes renaming are not important - don't summarize them.
              If there major changes, start with writing the file path.
@@ -21,6 +21,7 @@ CHUNK_USER_PROMPT = f"""Take a look at this PR file changes.
             
             The file diff is:
             %s"""
+
 FINAL_SUMMARY_USER_PROMPT = f"""
 Based on the following PR summaries of the files diff.
 Write in not more than 2 sentences what is the main goal of the PR.
@@ -32,7 +33,7 @@ The partial summaries are:
 """
 
 
-def pr_summarize(repo: Repository, pr: PullRequest, background_tasks: BackgroundTasks):
+def pr_summarize(repo: Repository, pr: PullRequest, background_tasks: BackgroundTasks) -> dict:
     try:
         issue = repo.get_issue(number=pr.number)
         new_body = pr.body.replace(SUMMARY_MAGIC_PHRASE, SUMMARY_IN_PROGRESS_MESSAGE)
@@ -41,7 +42,7 @@ def pr_summarize(repo: Repository, pr: PullRequest, background_tasks: Background
         eyes_reaction_id = reaction.id
         background_tasks.add_task(process_pr_for_summary, repo, pr, eyes_reaction_id)
 
-        return "Sent PR to background summarize."
+        return {"message": "Sent PR to background summarize."}
     except GithubException as e:
         return {"error": str(e)}
 
@@ -75,7 +76,7 @@ async def summary_file_diff(pr: PullRequest, file_diff: str) -> str:
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": CHUNK_USER_PROMPT % (pr.title, file_diff)
+                "content": FILE_SUMMARY_USER_PROMPT % (pr.title, file_diff)
             }
         ],
         temperature=0
